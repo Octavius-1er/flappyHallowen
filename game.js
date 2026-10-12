@@ -512,8 +512,16 @@ function punishGate() {
 }
 
 // ---------- end-of-world boss ----------
+const BOSSES = {
+  graveyard: { name: 'Giant Ghost', color: '#e6d6ff' },
+  haunted_forest: { name: 'Werewolf', color: '#8dff9a' },
+  castle_dungeon: { name: 'Vampire Lord', color: '#ff7a9a' },
+  pumpkin_village: { name: 'Pumpkin King', color: '#ffb347' },
+  foggy_swamp: { name: 'Toad Witch', color: '#c6e07a' }
+};
+function bossInfo() { return BOSSES[run && run.world] || BOSSES.graveyard; }
 function startBoss() {
-  run.boss = { hp: BOSS_HP, max: BOSS_HP, t: BOSS_SECONDS, q: null, answered: null, spell: 0, hit: 0, shake: 0 };
+  run.boss = { hp: BOSS_HP, max: BOSS_HP, t: BOSS_SECONDS, q: null, answered: null, spell: 0, hit: 0, shake: 0, world: run.world };
   nextBossQuestion();
   state = 'boss';
 }
@@ -587,17 +595,66 @@ function stepBoss(dt) {
   b.t -= dt;
   if (b.t <= 0) { b.t = 0; b.answered = { ok: false, i: -1, timeout: true, t: 0 }; bossHitWitch(); }
 }
+function blitSheet(key, x, y, w, h) {
+  const img = IMG[key]; if (!img) return;
+  const frame = Math.floor(t * 6) % 4;
+  ctx.drawImage(img, frame * 82, 0, 82, 56, Math.round(x), Math.round(y), w, h);
+}
 function drawBossSprite(x, y) {
-  const frame = Math.floor(t * 8);
-  ctx.fillStyle = 'rgba(176, 125, 255, 0.28)';
-  ctx.beginPath(); ctx.ellipse(x + 40, y + 58, 36, 42, 0, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#e6d6ff'; ctx.lineWidth = 1; ctx.stroke();
-  const ghost = IMG['character_small.head.ghost'];
-  if (ghost) ctx.drawImage(ghost, (frame % 4) * 82, 0, 82, 56, x - 6, y + Math.sin(t * 3) * 3, 100, 68);
-  const pum = IMG['character_small.head.pumpkin_head'];
-  if (pum) ctx.drawImage(pum, (frame % 4) * 82, 0, 82, 56, x + 34, y + 40, 52, 36);
-  spr('enemy.bat', x - 4 + Math.sin(t * 4) * 5, y + 6, Math.floor(t * 12));
-  spr('enemy.bat', x + 72, y + 18 + Math.cos(t * 3) * 4, Math.floor(t * 12));
+  const world = (run.boss && run.boss.world) || run.world;
+  const info = BOSSES[world] || BOSSES.graveyard;
+  const bob = Math.sin(t * 3) * 4;
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = info.color;
+  ctx.beginPath(); ctx.ellipse(x + 48, y + 62, 46, 36, 0, 0, 7); ctx.fill();
+  ctx.restore();
+  if (world === 'haunted_forest') {
+    const sway = Math.sin(t * 2) * 4;
+    ctx.fillStyle = '#2f6b32';
+    ctx.beginPath(); ctx.ellipse(x + 46 + sway, y + 30, 38, 20, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4e8f3c';
+    ctx.beginPath(); ctx.ellipse(x + 24 + sway, y + 42, 16, 14, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 70 + sway, y + 44, 18, 15, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6a4424';
+    ctx.fillRect(x + 40 + sway, y + 36, 14, 58);
+    blitSheet('character_small.head.werewolf', x + 8 + sway, y + 16 + bob * 0.3, 80, 56);
+  } else if (world === 'castle_dungeon') {
+    ctx.fillStyle = '#240814';
+    ctx.beginPath(); ctx.moveTo(x + 46, y + 28); ctx.lineTo(x + 96, y + 108); ctx.lineTo(x + 4, y + 108); ctx.fill();
+    ctx.fillStyle = '#7a1838';
+    ctx.beginPath(); ctx.moveTo(x + 46, y + 40); ctx.lineTo(x + 78, y + 104); ctx.lineTo(x + 16, y + 104); ctx.fill();
+    blitSheet('character_small.head.vampire', x + 8, y + 6 + bob, 84, 58);
+    spr('enemy.bat', x - 8 + Math.sin(t * 4) * 8, y + 8, Math.floor(t * 12));
+    spr('enemy.bat', x + 78, y + 22 + Math.cos(t * 3) * 6, Math.floor(t * 12));
+    spr('enemy.bat', x + 36, y + Math.sin(t * 2.2) * 5, Math.floor(t * 12));
+  } else if (world === 'pumpkin_village') {
+    ctx.fillStyle = '#e06a12';
+    ctx.beginPath(); ctx.ellipse(x + 48, y + 78, 40, 30, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#8a3a08'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#2f8a32';
+    ctx.fillRect(x + 44, y + 28 + bob, 8, 18);
+    blitSheet('character_small.head.pumpkin_head', x + 6, y + 10 + bob, 88, 60);
+    blitSheet('character_small.hat.crown', x + 20, y - 8 + bob, 56, 38);
+  } else if (world === 'foggy_swamp') {
+    const hop = Math.abs(Math.sin(t * 3)) * 6;
+    ctx.fillStyle = '#1c6a42';
+    ctx.beginPath(); ctx.ellipse(x + 50, y + 96, 48, 12, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3e9a48';
+    ctx.beginPath(); ctx.ellipse(x + 48, y + 74 - hop, 34, 24, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2d7a38';
+    ctx.beginPath(); ctx.ellipse(x + 22, y + 78 - hop, 10, 8, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 74, y + 78 - hop, 10, 8, 0, 0, 7); ctx.fill();
+    blitSheet('character_small.head.mummy', x + 12, y + 22 - hop, 76, 52);
+    blitSheet('character_small.hat.pointy', x + 18, y - 2 - hop, 64, 44);
+  } else {
+    ctx.fillStyle = 'rgba(236, 226, 255, 0.45)';
+    ctx.beginPath(); ctx.ellipse(x + 48, y + 68 + bob, 38, 46, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#f7f0ff'; ctx.lineWidth = 1; ctx.stroke();
+    blitSheet('character_small.head.ghost', x - 2, y + 16 + bob, 100, 68);
+    spr('fx.sparkle', x + 10, y + 24 + Math.sin(t * 5) * 6, Math.floor(t * 10));
+    spr('fx.sparkle', x + 70, y + 40 + Math.cos(t * 4) * 5, Math.floor(t * 10));
+  }
 }
 function drawBoss() {
   const b = run.boss;
@@ -612,8 +669,11 @@ function drawBoss() {
     spr('fx.sparkle', 36 + u * 62, 108, Math.floor(t * 14) + 1);
   }
   for (const f of run.fx) spr(f.key, f.x, f.y, Math.floor(f.t * f.fps));
-  txt('BOSS', 6, 4, 8, '#ffb4e6', 'left', 'Pixelify');
-  for (let i = 0; i < b.max; i++) { ctx.fillStyle = i < b.hp ? '#e23b4a' : '#3a2048'; ctx.fillRect(44 + i * 14, 6, 11, 8); }
+  const info = BOSSES[(b.world)] || bossInfo();
+  txt(info.name, 6, 3, 8, info.color, 'left', 'Pixelify');
+  ctx.font = '8px Pixelify';
+  const pipsX = Math.ceil(ctx.measureText(info.name).width) + 12;
+  for (let i = 0; i < b.max; i++) { ctx.fillStyle = i < b.hp ? info.color : '#3a2048'; ctx.fillRect(pipsX + i * 14, 5, 11, 8); }
   for (let i = 0; i < run.lives; i++) spr('fx.heart', 4 + i * 14, 16);
   const frac = Math.max(0, b.t / BOSS_SECONDS);
   txt(Math.ceil(Math.max(0, b.t)) + 's', W / 2, 132, 10, frac < 0.375 ? '#ff6b6b' : '#ffd23d', 'center', 'Pixelify');
@@ -873,7 +933,7 @@ function ensureRun() {
 function spawnBossNow() {
   if (!ensureRun()) return;
   startBoss();
-  cheatNoteSet('Boss');
+  cheatNoteSet(bossInfo().name);
 }
 function nextWorldNow() {
   const cur = (run && (state === 'play' || state === 'boss')) ? run.world : save.world;
@@ -914,22 +974,40 @@ const CHEAT_ROWS = [
   { key: '9', label: () => 'Next gate now', go: nextGateNow },
   { key: '0', label: () => 'Full hearts', go: fullHearts }
 ];
+function cheatBox() {
+  const rect = cv.getBoundingClientRect();
+  const scaleX = rect.width > 0 ? rect.width / W : 1;
+  const scaleY = rect.height > 0 ? rect.height / H : 1;
+  const scale = Math.min(scaleX, scaleY);
+  const closeH = Math.max(18, Math.ceil(44 / scale));
+  const panelX = 12, panelY = 6, panelW = W - 24, panelH = H - 12;
+  const top = panelY + closeH + 3;
+  const rowH = Math.min(26, Math.max(16, Math.floor((panelY + panelH - 14 - top) / CHEAT_ROWS.length)));
+  return { closeH, panelX, panelY, panelW, panelH, top, rowH };
+}
 function drawCheat() {
-  ctx.fillStyle = 'rgba(6,2,16,.78)'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#14081f'; ctx.fillRect(6, 8, 168, 304);
-  ctx.strokeStyle = '#b07dff'; ctx.strokeRect(6.5, 8.5, 167, 303);
-  txt('CHEATS', W / 2, 14, 8, '#ffd23d', 'center', 'Pixelify');
+  const box = cheatBox();
+  region(0, 0, W, H, () => { cheatOpen = false; });
+  ctx.fillStyle = 'rgba(6,2,16,.72)'; ctx.fillRect(0, 0, W, H);
+  region(box.panelX, box.panelY, box.panelW, box.panelH, () => {});
+  ctx.fillStyle = '#14081f'; ctx.fillRect(box.panelX, box.panelY, box.panelW, box.panelH);
+  ctx.strokeStyle = '#b07dff'; ctx.strokeRect(box.panelX + 0.5, box.panelY + 0.5, box.panelW - 1, box.panelH - 1);
+  const closeHov = region(box.panelX, box.panelY, box.panelW, box.closeH, () => { cheatOpen = false; });
+  ctx.fillStyle = closeHov ? '#8a2848' : '#5a2038';
+  ctx.fillRect(box.panelX, box.panelY, box.panelW, box.closeH);
+  txt('X CLOSE', box.panelX + box.panelW / 2, box.panelY + Math.max(2, (box.closeH - 10) / 2), 8, '#fff', 'center', 'Pixelify');
   CHEAT_ROWS.forEach((row, i) => {
-    const y = 30 + i * 26;
-    const hov = region(8, y, 164, 26, row.go);
+    const y = box.top + i * box.rowH;
+    const hov = region(box.panelX + 4, y, box.panelW - 8, box.rowH, row.go);
     ctx.fillStyle = hov ? '#3a2458' : '#241433';
-    ctx.fillRect(12, y + 1, 156, 24);
+    ctx.fillRect(box.panelX + 6, y + 1, box.panelW - 12, box.rowH - 2);
     ctx.strokeStyle = row.on && row.on() ? '#7dff5a' : '#6a4a90';
-    ctx.strokeRect(12.5, y + 1.5, 155, 23);
-    txt(row.key + '  ' + row.label(), 18, y + 7, 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
+    ctx.strokeRect(box.panelX + 6.5, y + 1.5, box.panelW - 13, box.rowH - 3);
+    txt(row.key + '  ' + row.label(), box.panelX + 12, y + Math.max(2, (box.rowH - 10) / 2), 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
   });
-  const foot = cheatNoteT > 0 ? cheatNote : 'Shift+A close';
-  txt(foot, W / 2, 294, 7, cheatNoteT > 0 ? '#ffd23d' : '#b09cc8', 'center', 'Pixelify');
+  const footY = box.top + CHEAT_ROWS.length * box.rowH;
+  const foot = cheatNoteT > 0 ? cheatNote : 'Shift+A';
+  if (footY < box.panelY + box.panelH - 8) txt(foot, W / 2, footY, 7, cheatNoteT > 0 ? '#ffd23d' : '#b09cc8', 'center', 'Pixelify');
 }
 function drawCheatMark() {
   const bits = [];
@@ -947,7 +1025,7 @@ function drawCheatMark() {
   ctx.restore();
 }
 function drawMute() {
-  if (state === 'loading') return;
+  if (state === 'loading' || cheatOpen) return;
   const x = cheatOpen ? 150 : state === 'menu' ? 158 : 160;
   const y = cheatOpen ? 12 : state === 'menu' ? 186 : state === 'play' ? 20 : 2;
   const hov = region(x, y, 16, 12, toggleMute);
@@ -1002,15 +1080,36 @@ function press(pt) {
   if (state === 'play') flap();
 }
 const seenInput = new WeakSet();
+let lastPressAt = 0;
 function onPointerDown(e) {
-  if (seenInput.has(e)) return;
-  seenInput.add(e);
+  if (!e || typeof e !== 'object') return;
+  if (typeof Event !== 'undefined' && e instanceof Event) {
+    if (seenInput.has(e)) return;
+    seenInput.add(e);
+  }
+  const now = performance.now();
+  if (now - lastPressAt < 50) return;
   if (e.isPrimary === false) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   const b = cv.getBoundingClientRect();
-  if (e.clientX < b.left || e.clientX >= b.right || e.clientY < b.top || e.clientY >= b.bottom) return;
-  e.preventDefault();
+  const inside = e.clientX >= b.left && e.clientX < b.right && e.clientY >= b.top && e.clientY < b.bottom;
+  if (!inside) {
+    if (cheatOpen) { cheatOpen = false; lastPressAt = now; }
+    return;
+  }
+  if (e.preventDefault) e.preventDefault();
+  lastPressAt = now;
   press(toNative(e));
+}
+function onTouchStart(e) {
+  if (!e || !e.touches || !e.touches[0]) return;
+  if (seenInput.has(e)) return;
+  seenInput.add(e);
+  const t = e.touches[0];
+  onPointerDown({
+    clientX: t.clientX, clientY: t.clientY, pointerType: 'touch', button: 0, isPrimary: true,
+    preventDefault() { if (e.cancelable) e.preventDefault(); }
+  });
 }
 function onKeyDown(e) {
   if (seenInput.has(e)) return;
@@ -1040,6 +1139,8 @@ window.addEventListener('keydown', onKeyDown, true);
 document.addEventListener('keydown', onKeyDown, true);
 window.addEventListener('pointerdown', onPointerDown, true);
 cv.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
+cv.addEventListener('touchstart', onTouchStart, { passive: false });
 cv.addEventListener('pointermove', e => { mouse = toNative(e); });
 
 // ---------- main loop ----------

@@ -1,0 +1,6 @@
+services:
+  - type: web
+    runtime: static
+    name: flappy-halloween
+    buildCommand: echo ok
+    staticPublishPath: .

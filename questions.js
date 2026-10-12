@@ -1,5 +1,6 @@
 // Questions d'anglais : à remplacer par les fiches de cours.
 // Format : { q: "question", choices: ["a","b","c"], answer: index }
+// Servent aux portes en vol et au boss de fin de monde.
 window.QUESTIONS = [
   { q: "How do you say 'citrouille' in English?", choices: ["Pumpkin", "Pumpking", "Potato"], answer: 0 },
   { q: "Complete: 'The witch ___ on her broom.'", choices: ["fly", "flies", "flying"], answer: 1 },

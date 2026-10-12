@@ -151,19 +151,54 @@ function drawWorld(w, alpha = 1) {
   lay('near', 0.6, 0);                        // near props over ground, BEHIND columns
   ctx.globalAlpha = 1;
 }
+function drawSign(text, colX, midY) {
+  let size = 8;
+  ctx.font = size + 'px Pixelify';
+  if (ctx.measureText(text).width > 70) size = 7;
+  ctx.font = size + 'px Pixelify';
+  const boxW = Math.ceil(ctx.measureText(text).width) + 8;
+  const boxH = size + 6;
+  let sx = Math.round(colX - boxW + 10);
+  if (sx < 2) sx = 2;
+  const sy = Math.round(midY - boxH / 2);
+  ctx.fillStyle = '#24143f';
+  ctx.fillRect(sx, sy, boxW, boxH);
+  ctx.strokeStyle = '#ffd23d';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx + 0.5, sy + 0.5, boxW - 1, boxH - 1);
+  txt(text, sx + 4, sy + 2, size, '#fff', 'left', 'Pixelify');
+}
 function drawColumn(w, col) {
   const ob = M.worlds[w].obstacle, body = IMG[`world.${w}.obstacle.body_tile`];
   const x = Math.round(col.x);
-  // top column: body tiles from 0 to gapTop-24, then cap_top
-  for (let y = col.top - 24 - 32; y > -32; y -= 32) ctx.drawImage(body, x, y);
-  spr(`world.${w}.obstacle.cap_top`, x + ob.cap_x_offset, col.top - 24);
-  const by = col.top + col.gap;
-  spr(`world.${w}.obstacle.cap_bottom`, x + ob.cap_x_offset, by);
-  for (let y = by + 24; y < H; y += 32) ctx.drawImage(body, x, y);
+  const fillBody = (y0, y1) => { if (!body) return; for (let y = y0; y < y1; y += 32) ctx.drawImage(body, x, y); };
+  if (!col.gate) {
+    for (let y = col.top - 24 - 32; y > -32; y -= 32) if (body) ctx.drawImage(body, x, y);
+    spr(`world.${w}.obstacle.cap_top`, x + ob.cap_x_offset, col.top - 24);
+    const by = col.top + col.gap;
+    spr(`world.${w}.obstacle.cap_bottom`, x + ob.cap_x_offset, by);
+    for (let y = by + 24; y < H; y += 32) if (body) ctx.drawImage(body, x, y);
+    return;
+  }
+  const gaps = col.gaps;
+  fillBody(-32, gaps[0].top - 24);
+  spr(`world.${w}.obstacle.cap_top`, x + ob.cap_x_offset, gaps[0].top - 24);
+  for (let i = 0; i < gaps.length; i++) {
+    const g = gaps[i];
+    const bottom = g.top + g.gap;
+    spr(`world.${w}.obstacle.cap_bottom`, x + ob.cap_x_offset, bottom);
+    if (i + 1 < gaps.length) {
+      const next = gaps[i + 1];
+      fillBody(bottom + 24, next.top - 24);
+      spr(`world.${w}.obstacle.cap_top`, x + ob.cap_x_offset, next.top - 24);
+    }
+    drawSign(g.label, x, g.top + g.gap / 2);
+  }
+  fillBody(gaps[gaps.length - 1].top + gaps[gaps.length - 1].gap + 24, H);
 }
 
 // ---------- game state ----------
-let state = 'loading', t = 0, run = null, quiz = null, over = null;
+let state = 'loading', t = 0, run = null, over = null;
 let shop = { cat: 0, page: 0, sel: 0, msg: '', msgT: 0 };
 const PX = 6; // player canvas left x (small canvas 82x56)
 
@@ -173,7 +208,8 @@ function newRun() {
     p, y: 120, vy: 0, cols: [], coins: [], bats: [], pick: [], fx: [], spawnX: 200, score: 0, scoreAcc: 0, colsPassed: 0,
     candy: 0, candyAcc: 0, lives: 1 + p.extraLife, maxLives: 3 + p.extraLife, shields: p.shields, inv: 0, ghost: p.ghostPass ? 1 : 0,
     bounce: p.groundBounce ? 1 : 0, petBat: p.petBat ? 1 : 0, magnetT: 0, slowT: 0, slowmoT: 0, batT: 4, world: save.world, prevWorld: null, fade: 0,
-    banner: 'Tap to fly!', bannerT: 2, started: false, dead: 0, nextQuiz: 10, frame: 0
+    banner: 'Tap to fly!', bannerT: 2, started: false, dead: 0, nextQuiz: 10, frame: 0,
+    streak: 1, gatesFaced: 0, regularSpawned: 0, boss: null
   };
   state = 'play';
 }
@@ -219,29 +255,42 @@ function step(dt) { // dt = 1 at 60fps
     else r.vy = -4;
     r.y = gy - c.h - (c.y - r.y);
   }
-  // spawn columns
+  // spawn columns — a gate replaces every 5th column (after 4 regular ones)
   r.spawnX -= speed * dt;
   if (r.spawnX <= W + 10) {
-    const baseGap = (M.worlds[r.world].obstacle.suggested_gap || 96) * 1.3;
-    const gap = Math.max(110, baseGap - level * 0.08);
-    const top = 36 + Math.random() * (gy - 36 - 36 - gap);
-    r.cols.push({ x: r.spawnX, top, gap, passed: false });
-    if (Math.random() < 0.7) r.coins.push({ x: r.spawnX + 8, y: top + gap / 2 - 12, a: Math.random() * 6 });
-    // coin arc between columns
-    if (Math.random() < 0.5) { const yy = 60 + Math.random() * 160; for (let i = 0; i < 3; i++) r.coins.push({ x: r.spawnX + 64 + i * 14, y: yy - Math.sin(i / 2 * Math.PI) * 10, a: i }); }
-    const roll = Math.random();
-    if (roll < 0.06) r.pick.push({ k: 'fx.magnet_powerup', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
-    else if (roll < 0.10 && r.lives < r.maxLives) r.pick.push({ k: 'fx.heart', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
-    else if (roll < 0.14) r.pick.push({ k: 'fx.shield_bubble', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
-    r.spawnX += 136;
+    const gateDue = r.regularSpawned >= 4 && window.QUESTIONS && QUESTIONS.length;
+    if (gateDue) {
+      const q = pickQuestion();
+      const gaps = gateOpenings(q, gy);
+      const x = r.spawnX + 50;
+      r.cols.push({ x, gate: true, gaps, q, passed: false, resolved: false });
+      r.regularSpawned = 0;
+      r.spawnX = x + 136;
+    } else {
+      const baseGap = (M.worlds[r.world].obstacle.suggested_gap || 96) * 1.3;
+      const gap = Math.max(110, baseGap - level * 0.08);
+      const top = 36 + Math.random() * (gy - 36 - 36 - gap);
+      r.cols.push({ x: r.spawnX, top, gap, passed: false });
+      if (Math.random() < 0.7) r.coins.push({ x: r.spawnX + 8, y: top + gap / 2 - 12, a: Math.random() * 6 });
+      if (Math.random() < 0.5) { const yy = 60 + Math.random() * 160; for (let i = 0; i < 3; i++) r.coins.push({ x: r.spawnX + 64 + i * 14, y: yy - Math.sin(i / 2 * Math.PI) * 10, a: i }); }
+      const roll = Math.random();
+      if (roll < 0.06) r.pick.push({ k: 'fx.magnet_powerup', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
+      else if (roll < 0.10 && r.lives < r.maxLives) r.pick.push({ k: 'fx.heart', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
+      else if (roll < 0.14) r.pick.push({ k: 'fx.shield_bubble', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
+      r.regularSpawned++;
+      r.spawnX += 136;
+    }
   }
   const ob = M.worlds[r.world].obstacle;
   for (const col of r.cols) {
     col.x -= speed * dt;
-    const cx = col.x + ob.cap_x_offset, cw = ob.cap_width;
-    const rects = [{ x: col.x, y: -50, w: ob.column_width, h: col.top - 24 + 50 }, { x: cx, y: col.top - 24, w: cw, h: 24 },
-                   { x: cx, y: col.top + col.gap, w: cw, h: 24 }, { x: col.x, y: col.top + col.gap + 24, w: ob.column_width, h: 400 }];
-    if (rects.some(q => ov(c, q))) hurt('column');
+    const slot = col.gate ? gateSlot(col, c, ob) : null;
+    if (slot && !col.resolved) {
+      col.resolved = true;
+      if (slot.correct) rewardGate(); else punishGate();
+    } else if (slot === false && !col.resolved && columnSolids(col, ob).some(q => ov(c, q))) {
+      col.resolved = true; punishGate();
+    } else if (!slot && columnSolids(col, ob).some(q => ov(c, q))) hurt('column');
     if (!col.passed && col.x + ob.column_width < c.x) {
       col.passed = true; r.colsPassed++;
       r.scoreAcc += r.p.scoreMul; const ns = Math.floor(r.scoreAcc + 1e-6);
@@ -252,10 +301,13 @@ function step(dt) { // dt = 1 at 60fps
           r.nextQuiz += 10;
           if (r.p.slowCols) r.slowT = 3;
           if (save.rotate) { const ws = worldList(); if (ws.length > 1 && r.score % 20 === 0) { r.prevWorld = r.world; r.world = ws[(ws.indexOf(r.world) + 1) % ws.length]; r.fade = 1; r.banner = WORLD_NAMES[r.world]; r.bannerT = 2; } }
-          if (window.QUESTIONS && QUESTIONS.length) startQuiz();
         }
       }
       if (r.p.slowmo10 && r.colsPassed % 10 === 0) r.slowmoT = 1;
+      if (col.gate && !r.dead) {
+        r.gatesFaced++;
+        if (r.gatesFaced >= 5) startBoss();
+      }
     }
   }
   r.cols = r.cols.filter(q => q.x > -60);
@@ -315,7 +367,17 @@ function drawPlay() {
   for (let i = 0; i < r.lives; i++) spr('fx.heart', 2 + i * 16, 2);
   for (let i = 0; i < r.shields; i++) { ctx.save(); ctx.translate(4 + i * 12, 26); ctx.scale(0.25, 0.25); shieldDraw(0, 0); ctx.restore(); }
   spr('ui.coin_icon', 126, 6); txt('x' + r.candy, 140, 8, 8);
-  txt(String(r.score), W / 2, 28, 16, '#fff', 'center');
+  txt('x' + r.streak, 20, 6, 8, '#ffd23d', 'left', 'Pixelify');
+  txt(String(r.score), W / 2, 22, 16, '#fff', 'center');
+  const gate = activeGate();
+  if (gate) {
+    const lines = wrap(gate.q.q, 168, 8, 'Pixelify').slice(0, 2);
+    const bh = 6 + lines.length * 10;
+    ctx.fillStyle = 'rgba(16,6,32,.78)';
+    ctx.fillRect(4, 42, 172, bh);
+    ctx.strokeStyle = '#b07dff'; ctx.lineWidth = 1; ctx.strokeRect(4.5, 42.5, 171, bh - 1);
+    lines.forEach((l, i) => txt(l, W / 2, 45 + i * 10, 8, '#fff', 'center', 'Pixelify'));
+  }
   let fy = 50; const tag = (s, col) => { txt(s, W / 2, fy, 8, col, 'center', 'Pixelify'); fy += 10; };
   if (r.magnetT > 0) tag('MAGNET ' + Math.ceil(r.magnetT), '#ff9ee8');
   if (r.slowT > 0) tag('SLOW COLUMNS', '#ffb347');
@@ -328,36 +390,207 @@ function shieldDraw(x, y) {
   spr('fx.shield_bubble', x, y, Math.floor(t * 8), 0.75);
 }
 
-// ---------- quiz ----------
-function startQuiz() {
-  const q = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
-  quiz = { q, res: null, t: 0, reward: 20 }; state = 'quiz';
+// ---------- answer gates ----------
+const BOSS_HP = 5, BOSS_SECONDS = 8, BOSS_REWARD = 40;
+let lastQuestion = -1;
+function pickQuestion() {
+  const qs = window.QUESTIONS || [];
+  if (!qs.length) return null;
+  let i = Math.floor(Math.random() * qs.length);
+  if (qs.length > 1 && i === lastQuestion) i = (i + 1) % qs.length;
+  lastQuestion = i;
+  return qs[i];
 }
-function answer(i) {
-  if (quiz.res) return; const ok = i === quiz.q.answer;
-  quiz.res = { ok, i, t: 0 };
-  if (ok) giveCandy(quiz.reward);
+function gateOpenings(q, gy) {
+  const maxN = Math.min(3, q.choices.length);
+  const n = maxN < 2 ? maxN : (Math.random() < 0.55 || maxN === 2 ? 2 : 3);
+  const pool = q.choices.map((_, i) => i).filter(i => i !== q.answer);
+  const idxs = [q.answer];
+  while (idxs.length < n && pool.length) idxs.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  for (let i = idxs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
+  const topLimit = 74, botLimit = Math.min(gy - 6, 292);
+  const wall = n >= 3 ? 26 : 48;
+  const gapH = (botLimit - topLimit - wall * (n - 1)) / n;
+  const gaps = [];
+  let y = topLimit;
+  for (const i of idxs) { gaps.push({ top: y, gap: gapH, label: q.choices[i], correct: i === q.answer }); y += gapH + wall; }
+  return gaps;
 }
-function drawQuiz() {
-  drawPlay();
-  ctx.fillStyle = 'rgba(11,6,24,0.78)'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#2a1648'; ctx.fillRect(8, 56, 164, 208); ctx.strokeStyle = '#b07dff'; ctx.lineWidth = 1; ctx.strokeRect(8.5, 56.5, 163, 207);
-  txt('ENGLISH QUIZ!', W / 2, 64, 8, '#ffd23d', 'center');
-  let y = 80; for (const l of wrap(quiz.q.q, 150, 10, 'Pixelify')) { txt(l, W / 2, y, 10, '#fff', 'center', 'Pixelify'); y += 12; }
-  y = Math.max(y + 6, 118);
-  quiz.q.choices.forEach((ch, i) => {
-    const hov = !quiz.res && region(16, y, 148, 22, () => answer(i));
-    let bg = hov ? '#ff8a3d' : '#6a3fb0';
-    if (quiz.res) { if (i === quiz.q.answer) bg = '#2e9e4f'; else if (i === quiz.res.i) bg = '#b0303a'; }
-    ctx.fillStyle = '#1a0d2e'; ctx.fillRect(16, y + 2, 148, 22); ctx.fillStyle = bg; ctx.fillRect(16, y, 148, 20);
-    txt((i + 1) + '. ' + ch, 22, y + 5, 10, '#fff', 'left', 'Pixelify');
-    y += 28;
-  });
-  if (quiz.res) {
-    txt(quiz.res.ok ? 'Correct! +' + Math.floor(quiz.reward * run.p.coinMul) : 'Oops! Answer: ' + quiz.q.choices[quiz.q.answer], W / 2, 240, 8, quiz.res.ok ? '#7dff5a' : '#ff6b6b', 'center', 'Pixelify');
-    if (quiz.res.ok) { spr('ui.coin_icon', 84, 226); }
-    txt('Tap to continue', W / 2, 252, 8, '#ccc', 'center', 'Pixelify');
-  } else txt('Answer for +' + Math.floor(quiz.reward * run.p.coinMul) + ' candy coins!', W / 2, 246, 8, '#ffd23d', 'center', 'Pixelify');
+function columnSolids(col, ob) {
+  const cx = col.x + ob.cap_x_offset, cw = ob.cap_width, bw = ob.column_width;
+  if (!col.gate) {
+    return [{ x: col.x, y: -50, w: bw, h: col.top - 24 + 50 }, { x: cx, y: col.top - 24, w: cw, h: 24 },
+      { x: cx, y: col.top + col.gap, w: cw, h: 24 }, { x: col.x, y: col.top + col.gap + 24, w: bw, h: 400 }];
+  }
+  const rects = [];
+  const gaps = col.gaps;
+  rects.push({ x: col.x, y: -50, w: bw, h: gaps[0].top - 24 + 50 });
+  rects.push({ x: cx, y: gaps[0].top - 24, w: cw, h: 24 });
+  for (let i = 0; i < gaps.length; i++) {
+    const bottom = gaps[i].top + gaps[i].gap;
+    rects.push({ x: cx, y: bottom, w: cw, h: 24 });
+    if (i + 1 < gaps.length) {
+      const next = gaps[i + 1];
+      if (next.top - 24 > bottom + 24) rects.push({ x: col.x, y: bottom + 24, w: bw, h: next.top - 24 - (bottom + 24) });
+      rects.push({ x: cx, y: next.top - 24, w: cw, h: 24 });
+    }
+  }
+  const last = gaps[gaps.length - 1];
+  rects.push({ x: col.x, y: last.top + last.gap + 24, w: bw, h: 400 });
+  return rects;
+}
+function gateSlot(col, c, ob) {
+  const left = col.x + ob.cap_x_offset, right = left + ob.cap_width;
+  if (c.x + c.w < left || c.x > right) return null;
+  const mid = c.y + c.h / 2;
+  return col.gaps.find(g => mid >= g.top && mid < g.top + g.gap) || false;
+}
+function activeGate() {
+  let best = null;
+  for (const c of run.cols) if (c.gate && !c.passed && c.x < W + 90 && c.x > -70 && (!best || c.x < best.x)) best = c;
+  return best;
+}
+function rewardGate() {
+  const gain = run.streak;
+  giveCandy(gain);
+  const c = hb();
+  addFx('fx.sparkle', c.x - 4, c.y, 14, 0.45);
+  addFx('fx.sparkle', c.x + 8, c.y + 6, 14, 0.45);
+  if (run.streak < 3) run.streak++;
+  run.banner = 'Correct! x' + gain; run.bannerT = 1.2;
+}
+function punishGate() {
+  const lives = run.lives, shields = run.shields, ghost = run.ghost;
+  hurt('column');
+  if (run.ghost < ghost) { const c = hb(); addFx('fx.death_poof', c.x, c.y, 14, 6 / 14); }
+  run.streak = 1;
+  run.banner = run.ghost < ghost ? 'Ghost phase!' : run.shields < shields ? 'Shield broke!' : 'Wrong opening!';
+  run.bannerT = 1.2;
+}
+
+// ---------- end-of-world boss ----------
+function startBoss() {
+  run.boss = { hp: BOSS_HP, max: BOSS_HP, t: BOSS_SECONDS, q: null, answered: null, spell: 0, hit: 0, shake: 0 };
+  nextBossQuestion();
+  state = 'boss';
+}
+function bossOptions(q) {
+  const n = Math.min(3, q.choices.length);
+  const pool = q.choices.map((_, i) => i).filter(i => i !== q.answer);
+  const idxs = [q.answer];
+  while (idxs.length < n && pool.length) idxs.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  for (let i = idxs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
+  return idxs.map(i => ({ label: q.choices[i], i }));
+}
+function nextBossQuestion() {
+  const b = run.boss;
+  b.q = pickQuestion();
+  b.options = b.q ? bossOptions(b.q) : [];
+  b.t = BOSS_SECONDS;
+  b.answered = null;
+  b.spell = 0;
+}
+function bossAnswer(i) {
+  const b = run.boss;
+  if (!b || b.answered || !b.q || run.dead) return;
+  if (!b.options.some(o => o.i === i)) return;
+  const ok = i === b.q.answer;
+  b.answered = { ok, i, t: 0 };
+  if (ok) { b.hp--; b.spell = 0.45; }
+  else bossHitWitch();
+}
+function bossHitWitch() {
+  const c = hb();
+  addFx('fx.death_poof', c.x, c.y, 14, 6 / 14);
+  run.lives--;
+  run.boss.hit = 0.45;
+  run.boss.shake = 0.35;
+  if (run.lives <= 0) { run.lives = 0; run.dead = 0.85; }
+}
+function defeatBoss() {
+  giveCandy(BOSS_REWARD);
+  const ws = WORLDS;
+  const i = Math.max(0, ws.indexOf(run.world));
+  run.world = ws[(i + 1) % ws.length];
+  save.world = run.world;
+  run.gatesFaced = 0;
+  run.regularSpawned = 0;
+  run.cols = []; run.coins = []; run.bats = []; run.pick = []; run.fx = [];
+  run.spawnX = 230;
+  run.y = 120; run.vy = 0;
+  run.banner = WORLD_NAMES[run.world] + '  +' + BOSS_REWARD; run.bannerT = 2.4;
+  run.inv = 1.5;
+  run.boss = null;
+  state = 'play';
+}
+function stepBoss(dt) {
+  const b = run.boss;
+  if (!b) return;
+  b.spell = Math.max(0, b.spell - dt);
+  b.hit = Math.max(0, b.hit - dt);
+  b.shake = Math.max(0, b.shake - dt);
+  scroll += 12 * dt;
+  updFx(dt * 60);
+  if (run.dead) { run.dead -= dt; if (run.dead <= 0) endRun(); return; }
+  if (b.answered) {
+    b.answered.t += dt;
+    if (b.answered.t >= 0.75) { if (b.hp <= 0) defeatBoss(); else nextBossQuestion(); }
+    return;
+  }
+  b.t -= dt;
+  if (b.t <= 0) { b.t = 0; b.answered = { ok: false, i: -1, timeout: true, t: 0 }; bossHitWitch(); }
+}
+function drawBossSprite(x, y) {
+  const frame = Math.floor(t * 8);
+  ctx.fillStyle = 'rgba(176, 125, 255, 0.28)';
+  ctx.beginPath(); ctx.ellipse(x + 40, y + 58, 36, 42, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#e6d6ff'; ctx.lineWidth = 1; ctx.stroke();
+  const ghost = IMG['character_small.head.ghost'];
+  if (ghost) ctx.drawImage(ghost, (frame % 4) * 82, 0, 82, 56, x - 6, y + Math.sin(t * 3) * 3, 100, 68);
+  const pum = IMG['character_small.head.pumpkin_head'];
+  if (pum) ctx.drawImage(pum, (frame % 4) * 82, 0, 82, 56, x + 34, y + 40, 52, 36);
+  spr('enemy.bat', x - 4 + Math.sin(t * 4) * 5, y + 6, Math.floor(t * 12));
+  spr('enemy.bat', x + 72, y + 18 + Math.cos(t * 3) * 4, Math.floor(t * 12));
+}
+function drawBoss() {
+  const b = run.boss;
+  ctx.save();
+  if (b.shake > 0) ctx.translate((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 3);
+  drawWorld(run.world);
+  drawChar(save.cfg, true, 0, 78, Math.floor(t * 8));
+  drawBossSprite(78, 36);
+  if (b.spell > 0) {
+    const u = 1 - b.spell / 0.45;
+    spr('fx.sparkle', 46 + u * 62, 100 + Math.sin(u * 8) * 8, Math.floor(t * 14));
+    spr('fx.sparkle', 36 + u * 62, 108, Math.floor(t * 14) + 1);
+  }
+  for (const f of run.fx) spr(f.key, f.x, f.y, Math.floor(f.t * f.fps));
+  txt('BOSS', 6, 4, 8, '#ffb4e6', 'left', 'Pixelify');
+  for (let i = 0; i < b.max; i++) { ctx.fillStyle = i < b.hp ? '#e23b4a' : '#3a2048'; ctx.fillRect(44 + i * 14, 6, 11, 8); }
+  for (let i = 0; i < run.lives; i++) spr('fx.heart', 4 + i * 14, 16);
+  const frac = Math.max(0, b.t / BOSS_SECONDS);
+  txt(Math.ceil(Math.max(0, b.t)) + 's', W / 2, 132, 10, frac < 0.375 ? '#ff6b6b' : '#ffd23d', 'center', 'Pixelify');
+  ctx.fillStyle = '#1a0d2e'; ctx.fillRect(16, 146, 148, 6);
+  ctx.fillStyle = frac < 0.375 ? '#ff4a4a' : '#ffd23d'; ctx.fillRect(16, 146, 148 * frac, 6);
+  if (b.q) {
+    const lines = wrap(b.q.q, 164, 8, 'Pixelify').slice(0, 2);
+    lines.forEach((l, i) => txt(l, W / 2, 156 + i * 11, 8, '#fff', 'center', 'Pixelify'));
+    b.options.forEach((o, n) => {
+      const y = 182 + n * 28;
+      const hov = !b.answered && region(12, y, 156, 24, () => bossAnswer(o.i));
+      let bg = hov ? '#ff8a3d' : '#6a3fb0';
+      if (b.answered) { if (o.i === b.q.answer) bg = '#2e9e4f'; else if (o.i === b.answered.i) bg = '#b0303a'; else bg = '#3a2458'; }
+      ctx.fillStyle = '#1a0d2e'; ctx.fillRect(12, y + 2, 156, 24);
+      ctx.fillStyle = bg; ctx.fillRect(12, y, 156, 22);
+      txt((n + 1) + '. ' + o.label, 20, y + 6, 10, '#fff', 'left', 'Pixelify');
+    });
+  }
+  if (b.answered) {
+    const msg = b.answered.ok ? 'Spell hits!' : b.answered.timeout ? 'Too slow!' : 'The boss strikes!';
+    txt(msg, W / 2, 268, 8, b.answered.ok ? '#7dff5a' : '#ff6b6b', 'center', 'Pixelify');
+  }
+  if (b.hit > 0) { ctx.fillStyle = 'rgba(255,40,60,' + (0.35 * b.hit / 0.45) + ')'; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
 }
 
 // ---------- game over ----------
@@ -482,15 +715,16 @@ function toNative(e) { const b = cv.getBoundingClientRect(); return { x: (e.clie
 function press(pt) {
   if (pt) mouse = pt;
   if (state === 'play') { flap(); return; }
-  if (state === 'quiz' && quiz.res) { state = 'play'; run.inv = Math.max(run.inv, 0.8); run.vy = -2; return; }
   for (let i = ui.length - 1; i >= 0; i--) { const u = ui[i]; if (mouse.x >= u.x && mouse.x < u.x + u.w && mouse.y >= u.y && mouse.y < u.y + u.h) { u.fn(); return; } }
 }
 cv.addEventListener('pointerdown', e => { e.preventDefault(); press(toNative(e)); });
 cv.addEventListener('pointermove', e => { mouse = toNative(e); });
 addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (e.repeat) return;
-    if (state === 'play') flap(); else if (state === 'menu' || state === 'over') newRun(); else if (state === 'quiz' && quiz.res) press(); }
-  if (state === 'quiz' && !quiz.res && /^Digit[1-9]$/.test(e.code)) { const i = +e.code.slice(5) - 1; if (i < quiz.q.choices.length) answer(i); }
+    if (state === 'play') flap(); else if (state === 'menu' || state === 'over') newRun(); }
+  if (state === 'boss' && run.boss && !run.boss.answered && /^Digit[1-9]$/.test(e.code)) {
+    const n = +e.code.slice(5) - 1; const o = run.boss.options && run.boss.options[n]; if (o) bossAnswer(o.i);
+  }
   if (state === 'shop' && e.code === 'Escape') state = 'menu';
 });
 
@@ -506,8 +740,8 @@ function frame(now) {
     ctx.fillStyle = '#fff'; ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.fillText('Loading spooky stuff...', 90, 145);
   } else if (state === 'menu') drawMenu();
   else if (state === 'shop') drawShop();
-  else if (state === 'play') { acc += el * 60; while (acc >= 1) { step(1); acc -= 1; if (state !== 'play') break; } drawPlay(); }
-  else if (state === 'quiz') { acc = 0; drawQuiz(); }
+  else if (state === 'play') { acc += el * 60; while (acc >= 1) { step(1); acc -= 1; if (state !== 'play') break; } if (state === 'play') drawPlay(); else if (state === 'boss') drawBoss(); }
+  else if (state === 'boss') { stepBoss(el); if (state === 'boss') drawBoss(); else if (state === 'play') drawPlay(); else if (state === 'over') drawOver(); }
   else if (state === 'over') drawOver();
   requestAnimationFrame(frame);
 }

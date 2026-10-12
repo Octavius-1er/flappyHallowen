@@ -225,7 +225,9 @@ function hb() {
 const ov = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 function hurt(kind) {
+  if (auto || godMode) return;
   const r = run; if (r.inv > 0 || r.dead) return;
+  sfxBad();
   const c = hb();
   if (kind === 'column' && r.ghost > 0) { r.ghost--; r.inv = 1.2; r.banner = 'Ghost phase!'; r.bannerT = 1; return; }
   if (r.shields > 0) { r.shields--; r.inv = 1.2; addFx('fx.death_poof', c.x + c.w / 2 - 24, c.y + c.h / 2 - 24, 14, 6 / 14); return; }
@@ -233,10 +235,44 @@ function hurt(kind) {
   if (r.lives > 0) { r.inv = 1.6; r.vy = -3; return; }
   r.dead = 0.9; r.vy = -2;
 }
-function flap() { if (!run || run.dead) return; run.started = true; run.vy = -2.38 * run.p.flap; }
+function flap(silent) { if (!run || run.dead) return; run.started = true; run.vy = -2.38 * run.p.flap; if (!silent) sfxFlap(); }
 
+// Session cheats. Shift+A opens the hidden panel. Nothing here is saved.
+let auto = false, autoBossT = 0, godMode = false, speedMul = 1, cheatOpen = false, cheatNote = '', cheatNoteT = 0;
+function riseLeft(v) {
+  if (v >= 0) return 0;
+  let rise = 0;
+  for (let i = 0; i < 80 && v < 0; i++) { v = Math.min(v + 0.14, 3.5); if (v < 0) rise -= v; else break; }
+  return rise;
+}
+function autoSteer() {
+  const r = run;
+  if (r.dead) { r.dead = 0; r.lives = Math.max(1, r.lives); }
+  r.started = true;
+  const c = hb();
+  const px = c.x + c.w / 2;
+  let col = null;
+  for (const q of r.cols) if (!q.passed && q.x >= -30 && (!col || q.x < col.x)) col = q;
+  let target = 140;
+  if (col) {
+    if (col.gate) { const hole = col.gaps.find(g => g.correct) || col.gaps[0]; target = hole.top + hole.gap / 2; }
+    else target = col.top + col.gap / 2;
+  } else {
+    for (const b of r.bats) {
+      if (b.dead) continue;
+      const dx = (b.x + 16) - px;
+      if (dx < -20 || dx > 70) continue;
+      const by = b.y + 12, mid = r.y + 25.5;
+      if (Math.abs(by - mid) < 30) target = by >= mid ? mid - 28 : mid + 28;
+    }
+  }
+  target = Math.max(40, Math.min(272, target));
+  const err = (r.y + 25.5) - target;
+  if (err > 3 && riseLeft(r.vy) < err - 2) flap(true);
+}
 function step(dt) { // dt = 1 at 60fps
   const r = run; r.frame += dt;
+  if (auto) autoSteer();
   if (r.dead) { r.dead -= dt / 60; r.vy += 0.25 * dt; r.y += r.vy * dt; updFx(dt); if (r.dead <= 0) endRun(); return; }
   if (!r.started) { r.y = 120 + Math.sin(t * 4) * 4; scroll += 0.6 * dt; return; }
   const slow = (r.slowmoT > 0 ? 0.5 : 1); dt *= slow;
@@ -317,7 +353,7 @@ function step(dt) { // dt = 1 at 60fps
     k.x -= speed * dt; k.a += dt / 5;
     const dx = pcx - (k.x + 12), dy = pcy - (k.y + 12), d = Math.hypot(dx, dy);
     if (mag && d < mag) { k.x += dx / d * 3 * dt; k.y += dy / d * 3 * dt; }
-    if (d < 14) { k.got = true; giveCandy(1); addFx('fx.sparkle', k.x, k.y, 14, 4 / 14); }
+    if (d < 14) { k.got = true; giveCandy(1); sfxCoin(); addFx('fx.sparkle', k.x, k.y, 14, 4 / 14); }
   }
   r.coins = r.coins.filter(k => !k.got && k.x > -30);
   for (const k of r.pick) {
@@ -333,6 +369,7 @@ function step(dt) { // dt = 1 at 60fps
   for (const b of r.bats) {
     b.x -= (speed + 0.8) * dt; b.ph += dt / 20; b.y = b.y0 + Math.sin(b.ph) * 18;
     if (!b.dead && ov(c, { x: b.x + 8, y: b.y + 6, w: 16, h: 14 })) {
+      if (auto) { b.dead = true; addFx('fx.death_poof', b.x - 8, b.y - 8, 14, 6 / 14); continue; }
       if (r.p.batImmune) continue;
       if (r.petBat > 0) { r.petBat--; b.dead = true; addFx('fx.death_poof', b.x - 8, b.y - 12, 14, 6 / 14); r.banner = 'Pet bat: yum!'; r.bannerT = 1; }
       else { hurt('bat'); if (r.inv > 0 || r.dead) { b.dead = true; } }
@@ -458,6 +495,7 @@ function rewardGate() {
   addFx('fx.sparkle', c.x + 8, c.y + 6, 14, 0.45);
   if (run.streak < 3) run.streak++;
   run.banner = 'Correct! x' + gain; run.bannerT = 1.2;
+  sfxGood();
 }
 function punishGate() {
   const lives = run.lives, shields = run.shields, ghost = run.ghost;
@@ -487,6 +525,7 @@ function nextBossQuestion() {
   b.q = pickQuestion();
   b.options = b.q ? bossOptions(b.q) : [];
   b.t = BOSS_SECONDS;
+  autoBossT = 0;
   b.answered = null;
   b.spell = 0;
 }
@@ -496,10 +535,12 @@ function bossAnswer(i) {
   if (!b.options.some(o => o.i === i)) return;
   const ok = i === b.q.answer;
   b.answered = { ok, i, t: 0 };
-  if (ok) { b.hp--; b.spell = 0.45; }
+  if (ok) { b.hp--; b.spell = 0.45; sfxBoss(); }
   else bossHitWitch();
 }
 function bossHitWitch() {
+  if (auto || godMode) return;
+  sfxBad();
   const c = hb();
   addFx('fx.death_poof', c.x, c.y, 14, 6 / 14);
   run.lives--;
@@ -508,6 +549,7 @@ function bossHitWitch() {
   if (run.lives <= 0) { run.lives = 0; run.dead = 0.85; }
 }
 function defeatBoss() {
+  sfxWin();
   giveCandy(BOSS_REWARD);
   const ws = WORLDS;
   const i = Math.max(0, ws.indexOf(run.world));
@@ -531,7 +573,7 @@ function stepBoss(dt) {
   b.shake = Math.max(0, b.shake - dt);
   scroll += 12 * dt;
   updFx(dt * 60);
-  if (run.dead) { run.dead -= dt; if (run.dead <= 0) endRun(); return; }
+  if (run.dead) { if (auto || godMode) { run.dead = 0; run.lives = Math.max(1, run.lives); } else { run.dead -= dt; if (run.dead <= 0) endRun(); return; } }
   if (b.answered) {
     b.answered.t += dt;
     if (b.answered.t >= 0.75) { if (b.hp <= 0) defeatBoss(); else nextBossQuestion(); }
@@ -594,7 +636,7 @@ function drawBoss() {
 }
 
 // ---------- game over ----------
-function endRun() { save.best = Math.max(save.best, run.score); over = { score: run.score, candy: run.candy, newBest: run.score > 0 && run.score === save.best }; state = 'over'; }
+function endRun() { sfxOver(); save.best = Math.max(save.best, run.score); over = { score: run.score, candy: run.candy, newBest: run.score > 0 && run.score === save.best }; state = 'over'; }
 function drawOver() {
   drawWorld(run.world); for (const col of run.cols) drawColumn(run.world, col);
   ctx.fillStyle = 'rgba(11,6,24,.45)'; ctx.fillRect(0, 0, W, H);
@@ -612,7 +654,7 @@ function drawOver() {
 
 // ---------- menu ----------
 function drawMenu() {
-  scroll += 0.4; drawWorld(save.world);
+  if (!cheatOpen) scroll += 0.4; drawWorld(save.world);
   ctx.fillStyle = 'rgba(11,6,24,.25)'; ctx.fillRect(0, 0, W, H);
   spr('ui.title_logo', 2, 10 + Math.round(Math.sin(t * 2) * 2));
   drawChar(save.cfg, false, 20, 96 + Math.sin(t * 3) * 4, Math.floor(t * 8));
@@ -633,7 +675,7 @@ function equip(cat, name) { if (cat === 'world') save.world = name; else save.cf
 function buy(cat, name) {
   const p = price(cat, name);
   if (save.coins < p) { flash('Need ' + (p - save.coins) + ' more candy!'); return; }
-  save.coins -= p; save.owned.add(cat + '.' + name); equip(cat, name); flash('Bought! Enjoy!');
+  save.coins -= p; save.owned.add(cat + '.' + name); equip(cat, name); flash('Bought! Enjoy!'); sfxBuy();
 }
 function flash(m) { shop.msg = m; shop.msgT = 1.6; }
 function drawIcon(cat, name, x, y) {
@@ -706,20 +748,245 @@ function drawShop() {
   else if (!eq) button('equip', 12, 280, () => equip(C.id, sel));
   else { spr('ui.button.blank.normal', 12, 280); txt('ON', 50, 287, 8, '#7dff5a', 'center'); }
   button('back', 92, 280, () => state = 'menu');
-  if (shop.msgT > 0) { shop.msgT -= 1 / 60; txt(shop.msg, W / 2, 308, 8, '#ffd23d', 'center', 'Pixelify'); }
+  if (shop.msgT > 0) { if (!cheatOpen) shop.msgT -= 1 / 60; txt(shop.msg, W / 2, 308, 8, '#ffd23d', 'center', 'Pixelify'); }
   else txt('PLAY from the menu to earn candy!', W / 2, 308, 8, '#888', 'center', 'Pixelify');
+}
+
+// ---------- audio (Web Audio, no files) ----------
+let actx = null, musicGain = null, sfxGain = null, muted = false, musicStep = 0, nextNoteAt = 0, noiseBuf = null;
+const TUNE = [
+  [220, 0.28], [0, 0.08], [233, 0.18], [220, 0.18],
+  [196, 0.28], [0, 0.1], [174, 0.36],
+  [196, 0.18], [220, 0.18], [262, 0.28], [247, 0.36],
+  [0, 0.12], [233, 0.18], [220, 0.18], [196, 0.28], [174, 0.48],
+  [165, 0.28], [196, 0.18], [220, 0.28], [0, 0.14],
+  [262, 0.18], [247, 0.18], [233, 0.28], [220, 0.4],
+  [196, 0.18], [174, 0.18], [165, 0.36], [147, 0.5],
+  [0, 0.22]
+];
+function ensureAudio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (!actx) {
+    try {
+      actx = new AC();
+      const master = actx.createGain(); master.gain.value = 0.85; master.connect(actx.destination);
+      musicGain = actx.createGain(); musicGain.gain.value = 1; musicGain.connect(master);
+      sfxGain = actx.createGain(); sfxGain.gain.value = 1; sfxGain.connect(master);
+      nextNoteAt = actx.currentTime + 0.05;
+    } catch (e) { actx = null; return; }
+  }
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+}
+function tone(freq, dur, type, gain, at, dest, slideTo) {
+  try {
+    if (!actx || muted || !freq || !dest) return;
+    const t0 = at || actx.currentTime;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(Math.max(40, freq), t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t0 + dur);
+    g.gain.setValueAtTime(Math.max(0.0008, gain), t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + Math.max(0.03, dur));
+    o.connect(g); g.connect(dest);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  } catch (e) { /* a dropped blip should not stop the game */ }
+}
+function noiseThud() {
+  try {
+    if (!actx || muted) return;
+    if (!noiseBuf) {
+      const n = Math.floor(actx.sampleRate * 0.18);
+      noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    }
+    const src = actx.createBufferSource(); src.buffer = noiseBuf;
+    const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.22, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.16);
+    src.connect(f); f.connect(g); g.connect(sfxGain);
+    src.start();
+  } catch (e) {}
+}
+function sfxFlap() { tone(460, 0.07, 'square', 0.055, 0, sfxGain, 740); }
+function sfxCoin() { const t0 = actx && actx.currentTime; tone(988, 0.06, 'square', 0.05, t0, sfxGain); tone(1319, 0.1, 'square', 0.04, t0 ? t0 + 0.05 : 0, sfxGain); }
+function sfxGood() { const t0 = actx && actx.currentTime; [523, 659, 784].forEach((f, i) => tone(f, 0.11, 'square', 0.05, t0 ? t0 + i * 0.07 : 0, sfxGain)); }
+function sfxBad() { noiseThud(); tone(190, 0.16, 'square', 0.06, 0, sfxGain, 70); }
+function sfxBoss() { tone(220, 0.12, 'square', 0.07, 0, sfxGain, 760); tone(660, 0.14, 'triangle', 0.035, 0, sfxGain); }
+function sfxWin() { const t0 = actx && actx.currentTime; [392, 523, 659, 784, 1046].forEach((f, i) => tone(f, 0.16, 'square', 0.05, t0 ? t0 + i * 0.09 : 0, sfxGain)); }
+function sfxBuy() { const t0 = actx && actx.currentTime; tone(660, 0.08, 'square', 0.05, t0, sfxGain); tone(880, 0.12, 'square', 0.05, t0 ? t0 + 0.08 : 0, sfxGain); }
+function sfxOver() { const t0 = actx && actx.currentTime; [440, 349, 262, 196].forEach((f, i) => tone(f, 0.22, 'triangle', 0.06, t0 ? t0 + i * 0.16 : 0, sfxGain)); }
+function pumpMusic() {
+  if (!actx || muted || !musicGain) return;
+  const horizon = actx.currentTime + 0.28;
+  if (nextNoteAt < actx.currentTime - 0.05) nextNoteAt = actx.currentTime + 0.02;
+  let guard = 0;
+  while (nextNoteAt < horizon && guard++ < 12) {
+    const [freq, dur] = TUNE[musicStep % TUNE.length];
+    if (freq) {
+      tone(freq, dur * 0.9, 'square', 0.04, nextNoteAt, musicGain);
+      tone(freq / 2, dur, 'triangle', 0.028, nextNoteAt, musicGain);
+    }
+    nextNoteAt += dur;
+    musicStep++;
+  }
+}
+function toggleMute() {
+  ensureAudio();
+  muted = !muted;
+  if (actx && musicGain && sfxGain) {
+    const g = muted ? 0 : 1, t0 = actx.currentTime;
+    musicGain.gain.setValueAtTime(g, t0);
+    sfxGain.gain.setValueAtTime(g, t0);
+    if (!muted) nextNoteAt = t0 + 0.02;
+  }
+}
+
+// ---------- hidden cheat menu ----------
+function cheatNoteSet(s) { cheatNote = s; cheatNoteT = 1.1; }
+function cycleSpeed() {
+  speedMul = speedMul === 1 ? 2 : speedMul === 2 ? 3 : speedMul === 3 ? 5 : 1;
+  acc = 0; cheatNoteSet('Speed x' + speedMul);
+}
+function grantCandy(n) {
+  save.coins += n;
+  if (run && (state === 'play' || state === 'boss')) run.candy += n;
+  cheatNoteSet('+' + n + ' candy');
+}
+function unlockAll() {
+  for (const c of CATS) for (const name of c.items) if (name && price(c.id, name) > 0) save.owned.add(c.id + '.' + name);
+  cheatNoteSet('Shop unlocked');
+}
+function ensureRun() {
+  if (state === 'loading') return false;
+  if ((state === 'play' || state === 'boss') && run && !run.dead) return true;
+  newRun();
+  return true;
+}
+function spawnBossNow() {
+  if (!ensureRun()) return;
+  startBoss();
+  cheatNoteSet('Boss');
+}
+function nextWorldNow() {
+  const cur = (run && (state === 'play' || state === 'boss')) ? run.world : save.world;
+  const n = WORLDS[(Math.max(0, WORLDS.indexOf(cur)) + 1) % WORLDS.length];
+  save.world = n;
+  if (run && (state === 'play' || state === 'boss')) {
+    run.prevWorld = run.world; run.world = n; run.fade = 1; run.banner = WORLD_NAMES[n]; run.bannerT = 2;
+  }
+  cheatNoteSet(WORLD_NAMES[n]);
+}
+function nextGateNow() {
+  if (!ensureRun()) return;
+  if (state === 'boss') { run.boss = null; state = 'play'; }
+  run.regularSpawned = 4;
+  run.spawnX = Math.min(run.spawnX, W + 8);
+  cheatNoteSet('Next column is a gate');
+}
+function fullHearts() {
+  if (!ensureRun()) return;
+  run.lives = run.maxLives;
+  cheatNoteSet('Hearts full');
+}
+function toggleAutopilot() { auto = !auto; autoBossT = 0; cheatNoteSet(auto ? 'Autopilot on' : 'Autopilot off'); }
+function toggleGod() {
+  godMode = !godMode;
+  if (godMode && run && run.dead && state !== 'over') { run.dead = 0; run.lives = Math.max(1, run.lives); }
+  cheatNoteSet(godMode ? 'Invincible on' : 'Invincible off');
+}
+const CHEAT_ROWS = [
+  { key: '1', label: () => 'Autopilot  ' + (auto ? 'ON' : 'OFF'), on: () => auto, go: toggleAutopilot },
+  { key: '2', label: () => 'Speed  x' + speedMul, on: () => speedMul !== 1, go: cycleSpeed },
+  { key: '3', label: () => 'Give +100 candy', go: () => grantCandy(100) },
+  { key: '4', label: () => 'Give +1000 candy', go: () => grantCandy(1000) },
+  { key: '5', label: () => 'Invincible  ' + (godMode ? 'ON' : 'OFF'), on: () => godMode, go: toggleGod },
+  { key: '6', label: () => 'Unlock all shop', go: unlockAll },
+  { key: '7', label: () => 'Spawn boss now', go: spawnBossNow },
+  { key: '8', label: () => 'Next world', go: nextWorldNow },
+  { key: '9', label: () => 'Next gate now', go: nextGateNow },
+  { key: '0', label: () => 'Full hearts', go: fullHearts }
+];
+function drawCheat() {
+  ctx.fillStyle = 'rgba(6,2,16,.78)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#14081f'; ctx.fillRect(6, 8, 168, 304);
+  ctx.strokeStyle = '#b07dff'; ctx.strokeRect(6.5, 8.5, 167, 303);
+  txt('CHEATS', W / 2, 14, 8, '#ffd23d', 'center', 'Pixelify');
+  CHEAT_ROWS.forEach((row, i) => {
+    const y = 30 + i * 26;
+    const hov = region(12, y, 156, 22, row.go);
+    ctx.fillStyle = hov ? '#3a2458' : '#241433';
+    ctx.fillRect(12, y, 156, 22);
+    ctx.strokeStyle = row.on && row.on() ? '#7dff5a' : '#6a4a90';
+    ctx.strokeRect(12.5, y + 0.5, 155, 21);
+    txt(row.key + '  ' + row.label(), 18, y + 6, 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
+  });
+  const foot = cheatNoteT > 0 ? cheatNote : 'Shift+A close';
+  txt(foot, W / 2, 294, 7, cheatNoteT > 0 ? '#ffd23d' : '#b09cc8', 'center', 'Pixelify');
+}
+function drawCheatMark() {
+  const bits = [];
+  if (auto) bits.push('AUTO');
+  if (speedMul !== 1) bits.push('x' + speedMul);
+  if (godMode) bits.push('GOD');
+  if (!bits.length || state === 'loading') return;
+  const s = bits.join(' ');
+  ctx.save(); ctx.globalAlpha = 0.72;
+  ctx.font = '7px Pixelify';
+  const w = Math.ceil(ctx.measureText(s).width);
+  ctx.fillStyle = 'rgba(12,6,24,.55)';
+  ctx.fillRect(W - w - 8, H - 13, w + 6, 9);
+  txt(s, W - 4, H - 12, 7, '#d9c8ff', 'right', 'Pixelify', null);
+  ctx.restore();
+}
+function drawMute() {
+  if (state === 'loading') return;
+  const x = cheatOpen ? 150 : state === 'menu' ? 158 : 160;
+  const y = cheatOpen ? 12 : state === 'menu' ? 186 : state === 'play' ? 20 : 2;
+  const hov = region(x, y, 16, 12, toggleMute);
+  ctx.fillStyle = hov ? '#3a2458' : 'rgba(12,6,24,.78)';
+  ctx.fillRect(x, y, 16, 12);
+  ctx.strokeStyle = muted ? '#886' : '#ffd23d';
+  ctx.strokeRect(x + 0.5, y + 0.5, 15, 11);
+  txt('M', x + 8, y + 2, 8, muted ? '#888' : '#ffd23d', 'center', 'Pixelify', null);
+  if (muted) { ctx.strokeStyle = '#e23b4a'; ctx.beginPath(); ctx.moveTo(x + 3, y + 10); ctx.lineTo(x + 13, y + 2); ctx.stroke(); }
+}
+function autoAnswerBoss(realDt) {
+  if (!auto || state !== 'boss' || !run || !run.boss || run.boss.answered || !run.boss.q) return;
+  autoBossT += realDt;
+  if (autoBossT >= 0.7) { autoBossT = 0; bossAnswer(run.boss.q.answer); }
+}
+function cheatKey(e) {
+  if (e.code === 'Digit0' || e.code === 'Numpad0') return '0';
+  if (/^Digit[1-9]$/.test(e.code)) return e.code.slice(5);
+  if (/^Numpad[1-9]$/.test(e.code)) return e.code.slice(6);
+  return '';
 }
 
 // ---------- input ----------
 function toNative(e) { const b = cv.getBoundingClientRect(); return { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * H }; }
 function press(pt) {
+  ensureAudio();
   if (pt) mouse = pt;
-  if (state === 'play') { flap(); return; }
   for (let i = ui.length - 1; i >= 0; i--) { const u = ui[i]; if (mouse.x >= u.x && mouse.x < u.x + u.w && mouse.y >= u.y && mouse.y < u.y + u.h) { u.fn(); return; } }
+  if (cheatOpen) return;
+  if (state === 'play') flap();
 }
 cv.addEventListener('pointerdown', e => { e.preventDefault(); press(toNative(e)); });
 cv.addEventListener('pointermove', e => { mouse = toNative(e); });
 addEventListener('keydown', e => {
+  ensureAudio();
+  if (e.code === 'KeyM' && !e.shiftKey) { e.preventDefault(); if (!e.repeat) toggleMute(); return; }
+  if (e.code === 'KeyA' && e.shiftKey) { e.preventDefault(); if (!e.repeat) cheatOpen = !cheatOpen; return; }
+  if (cheatOpen) {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (e.code === 'Escape') { cheatOpen = false; return; }
+    const k = cheatKey(e); const row = CHEAT_ROWS.find(r => r.key === k); if (row) row.go();
+    return;
+  }
   if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (e.repeat) return;
     if (state === 'play') flap(); else if (state === 'menu' || state === 'over') newRun(); }
   if (state === 'boss' && run.boss && !run.boss.answered && /^Digit[1-9]$/.test(e.code)) {
@@ -730,19 +997,36 @@ addEventListener('keydown', e => {
 
 // ---------- main loop ----------
 let last = performance.now(), acc = 0;
-function frame(now) {
-  const el = Math.min(0.1, (now - last) / 1000); last = now; t += el;
-  ctx.setTransform(S, 0, 0, S, 0, 0); ctx.imageSmoothingEnabled = false;
-  ui = [];
+function drawState() {
   if (state === 'loading') {
     ctx.fillStyle = '#0b0618'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#b07dff'; ctx.fillRect(30, 158, 120 * loadPct, 6); ctx.strokeStyle = '#fff'; ctx.strokeRect(29.5, 157.5, 121, 7);
     ctx.fillStyle = '#fff'; ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.fillText('Loading spooky stuff...', 90, 145);
   } else if (state === 'menu') drawMenu();
   else if (state === 'shop') drawShop();
-  else if (state === 'play') { acc += el * 60; while (acc >= 1) { step(1); acc -= 1; if (state !== 'play') break; } if (state === 'play') drawPlay(); else if (state === 'boss') drawBoss(); }
-  else if (state === 'boss') { stepBoss(el); if (state === 'boss') drawBoss(); else if (state === 'play') drawPlay(); else if (state === 'over') drawOver(); }
+  else if (state === 'play') drawPlay();
+  else if (state === 'boss') drawBoss();
   else if (state === 'over') drawOver();
+  if (!cheatOpen) drawCheatMark();
+  if (cheatOpen) drawCheat();
+  drawMute();
+}
+function frame(now) {
+  const el = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!cheatOpen) t += el;
+  if (cheatNoteT > 0) cheatNoteT = Math.max(0, cheatNoteT - el);
+  ctx.setTransform(S, 0, 0, S, 0, 0); ctx.imageSmoothingEnabled = false;
+  ui = [];
+  pumpMusic();
+  if (!cheatOpen && state === 'play') {
+    if (speedMul === 1) { acc += el * 60; while (acc >= 1) { step(1); acc -= 1; if (state !== 'play') break; } }
+    else { for (let i = 0; i < speedMul && state === 'play'; i++) step(1); acc = 0; }
+  } else if (!cheatOpen && state === 'boss') {
+    const showing = !!(run.boss && run.boss.answered);
+    stepBoss(el * (showing ? 1 : speedMul));
+    if (auto) autoAnswerBoss(el);
+  }
+  drawState();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

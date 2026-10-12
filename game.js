@@ -181,7 +181,11 @@ function worldList() { return WORLDS.filter(w => owns('world', w)); }
 function addFx(key, x, y, fps, life) { run.fx.push({ key, x, y, fps, t: 0, life }); }
 function giveCandy(n) { run.candyAcc += n * run.p.coinMul; const g = Math.floor(run.candyAcc); if (g) { run.candyAcc -= g; run.candy += g; save.coins += g; } }
 
-function hb() { const h = M.character.small_variant.hitbox_suggestion; return { x: PX + h.x, y: run.y + h.y, w: h.w, h: h.h }; }
+function hb() {
+  const h = M.character.small_variant.hitbox_suggestion;
+  const w = h.w * 0.8, hh = h.h * 0.8;
+  return { x: PX + h.x + (h.w - w) / 2, y: run.y + h.y + (h.h - hh) / 2, w, h: hh };
+}
 const ov = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 function hurt(kind) {
@@ -193,7 +197,7 @@ function hurt(kind) {
   if (r.lives > 0) { r.inv = 1.6; r.vy = -3; return; }
   r.dead = 0.9; r.vy = -2;
 }
-function flap() { if (!run || run.dead) return; run.started = true; run.vy = -3.4 * run.p.flap; }
+function flap() { if (!run || run.dead) return; run.started = true; run.vy = -2.38 * run.p.flap; }
 
 function step(dt) { // dt = 1 at 60fps
   const r = run; r.frame += dt;
@@ -201,9 +205,9 @@ function step(dt) { // dt = 1 at 60fps
   if (!r.started) { r.y = 120 + Math.sin(t * 4) * 4; scroll += 0.6 * dt; return; }
   const slow = (r.slowmoT > 0 ? 0.5 : 1); dt *= slow;
   const level = Math.min(r.score, 60);
-  const speed = (1.1 + level * 0.008) * (r.slowT > 0 ? 0.6 : 1);
-  const grav = 0.2;
-  r.vy = Math.min(r.vy + grav * dt, 5); r.y += r.vy * dt;
+  const speed = (1.1 + level * 0.004) * (r.slowT > 0 ? 0.6 : 1);
+  const grav = 0.14;
+  r.vy = Math.min(r.vy + grav * dt, 3.5); r.y += r.vy * dt;
   for (const k of ['inv', 'magnetT', 'slowT', 'slowmoT', 'bannerT', 'fade']) if (r[k] > 0) r[k] = Math.max(0, r[k] - dt / 60 / slow);
   scroll += speed * dt;
   const c = hb();
@@ -213,12 +217,13 @@ function step(dt) { // dt = 1 at 60fps
     if (r.bounce > 0) { r.bounce--; r.vy = -4; r.banner = 'Bone bounce!'; r.bannerT = 1; }
     else if (r.inv <= 0) { hurt('ground'); if (!r.dead) r.vy = -4.2; }
     else r.vy = -4;
-    r.y = gy - c.h - M.character.small_variant.hitbox_suggestion.y;
+    r.y = gy - c.h - (c.y - r.y);
   }
   // spawn columns
   r.spawnX -= speed * dt;
   if (r.spawnX <= W + 10) {
-    const gap = Math.max(80, (M.worlds[r.world].obstacle.suggested_gap || 96) - level * 0.3);
+    const baseGap = (M.worlds[r.world].obstacle.suggested_gap || 96) * 1.3;
+    const gap = Math.max(110, baseGap - level * 0.08);
     const top = 36 + Math.random() * (gy - 36 - 36 - gap);
     r.cols.push({ x: r.spawnX, top, gap, passed: false });
     if (Math.random() < 0.7) r.coins.push({ x: r.spawnX + 8, y: top + gap / 2 - 12, a: Math.random() * 6 });
@@ -228,7 +233,7 @@ function step(dt) { // dt = 1 at 60fps
     if (roll < 0.06) r.pick.push({ k: 'fx.magnet_powerup', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
     else if (roll < 0.10 && r.lives < r.maxLives) r.pick.push({ k: 'fx.heart', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
     else if (roll < 0.14) r.pick.push({ k: 'fx.shield_bubble', x: r.spawnX + 80, y: 60 + Math.random() * 150 });
-    r.spawnX += 116;
+    r.spawnX += 136;
   }
   const ob = M.worlds[r.world].obstacle;
   for (const col of r.cols) {

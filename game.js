@@ -277,7 +277,8 @@ function step(dt) { // dt = 1 at 60fps
   if (!r.started) { r.y = 120 + Math.sin(t * 4) * 4; scroll += 0.6 * dt; return; }
   const slow = (r.slowmoT > 0 ? 0.5 : 1); dt *= slow;
   const level = Math.min(r.score, 60);
-  const speed = (1.1 + level * 0.004) * (r.slowT > 0 ? 0.6 : 1);
+  const gateAhead = r.cols.some(col => col.gate && !col.passed) || (r.regularSpawned >= 4 && window.QUESTIONS && QUESTIONS.length);
+  const speed = (1.1 + level * 0.004) * (r.slowT > 0 ? 0.6 : 1) * (gateAhead ? 0.6 : 1);
   const grav = 0.14;
   r.vy = Math.min(r.vy + grav * dt, 3.5); r.y += r.vy * dt;
   for (const k of ['inv', 'magnetT', 'slowT', 'slowmoT', 'bannerT', 'fade']) if (r[k] > 0) r[k] = Math.max(0, r[k] - dt / 60 / slow);
@@ -298,7 +299,8 @@ function step(dt) { // dt = 1 at 60fps
     if (gateDue) {
       const q = pickQuestion();
       const gaps = gateOpenings(q, gy);
-      const x = r.spawnX + 50;
+      // Two extra column-gaps of lead (~6 s at normal speed) so the question can be read.
+      const x = r.spawnX + 50 + 136 * 2;
       r.cols.push({ x, gate: true, gaps, q, passed: false, resolved: false });
       r.regularSpawned = 0;
       r.spawnX = x + 136;
@@ -407,15 +409,18 @@ function drawPlay() {
   txt('x' + r.streak, 20, 6, 8, '#ffd23d', 'left', 'Pixelify');
   txt(String(r.score), W / 2, 22, 16, '#fff', 'center');
   const gate = activeGate();
+  let bannerBottom = 36;
   if (gate) {
-    const lines = wrap(gate.q.q, 168, 8, 'Pixelify').slice(0, 2);
-    const bh = 6 + lines.length * 10;
-    ctx.fillStyle = 'rgba(16,6,32,.78)';
-    ctx.fillRect(4, 42, 172, bh);
-    ctx.strokeStyle = '#b07dff'; ctx.lineWidth = 1; ctx.strokeRect(4.5, 42.5, 171, bh - 1);
-    lines.forEach((l, i) => txt(l, W / 2, 45 + i * 10, 8, '#fff', 'center', 'Pixelify'));
+    const lines = wrap(gate.q.q, 164, 10, 'Pixelify').slice(0, 3);
+    const lh = 12;
+    const bh = 8 + lines.length * lh;
+    ctx.fillStyle = 'rgba(16,6,32,.9)';
+    ctx.fillRect(4, 36, 172, bh);
+    ctx.strokeStyle = '#ffd23d'; ctx.lineWidth = 1; ctx.strokeRect(4.5, 36.5, 171, bh - 1);
+    lines.forEach((l, i) => txt(l, W / 2, 40 + i * lh, 10, '#fff', 'center', 'Pixelify'));
+    bannerBottom = 36 + bh;
   }
-  let fy = 50; const tag = (s, col) => { txt(s, W / 2, fy, 8, col, 'center', 'Pixelify'); fy += 10; };
+  let fy = bannerBottom + 4; const tag = (s, col) => { txt(s, W / 2, fy, 8, col, 'center', 'Pixelify'); fy += 10; };
   if (r.magnetT > 0) tag('MAGNET ' + Math.ceil(r.magnetT), '#ff9ee8');
   if (r.slowT > 0) tag('SLOW COLUMNS', '#ffb347');
   if (r.slowmoT > 0) tag('SLOW-MO', '#9effd8');
@@ -484,7 +489,7 @@ function gateSlot(col, c, ob) {
 }
 function activeGate() {
   let best = null;
-  for (const c of run.cols) if (c.gate && !c.passed && c.x < W + 90 && c.x > -70 && (!best || c.x < best.x)) best = c;
+  for (const c of run.cols) if (c.gate && !c.passed && c.x > -70 && (!best || c.x < best.x)) best = c;
   return best;
 }
 function rewardGate() {
@@ -916,12 +921,12 @@ function drawCheat() {
   txt('CHEATS', W / 2, 14, 8, '#ffd23d', 'center', 'Pixelify');
   CHEAT_ROWS.forEach((row, i) => {
     const y = 30 + i * 26;
-    const hov = region(12, y, 156, 22, row.go);
+    const hov = region(8, y, 164, 26, row.go);
     ctx.fillStyle = hov ? '#3a2458' : '#241433';
-    ctx.fillRect(12, y, 156, 22);
+    ctx.fillRect(12, y + 1, 156, 24);
     ctx.strokeStyle = row.on && row.on() ? '#7dff5a' : '#6a4a90';
-    ctx.strokeRect(12.5, y + 0.5, 155, 21);
-    txt(row.key + '  ' + row.label(), 18, y + 6, 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
+    ctx.strokeRect(12.5, y + 1.5, 155, 23);
+    txt(row.key + '  ' + row.label(), 18, y + 7, 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
   });
   const foot = cheatNoteT > 0 ? cheatNote : 'Shift+A close';
   txt(foot, W / 2, 294, 7, cheatNoteT > 0 ? '#ffd23d' : '#b09cc8', 'center', 'Pixelify');
@@ -958,11 +963,32 @@ function autoAnswerBoss(realDt) {
   autoBossT += realDt;
   if (autoBossT >= 0.7) { autoBossT = 0; bossAnswer(run.boss.q.answer); }
 }
-function cheatKey(e) {
-  if (e.code === 'Digit0' || e.code === 'Numpad0') return '0';
-  if (/^Digit[1-9]$/.test(e.code)) return e.code.slice(5);
-  if (/^Numpad[1-9]$/.test(e.code)) return e.code.slice(6);
+// QWERTY: Shift+A is code KeyA, key "A". AZERTY: the letter A is code KeyQ, key "A"/"a".
+function isShiftA(e) {
+  if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const key = String(e.key || '').toLowerCase();
+  return key === 'a' || e.code === 'KeyA';
+}
+const AZERTY_DIGIT = { '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5', '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0' };
+function digitFromEvent(e) {
+  const code = e.code || '';
+  if (code === 'Digit0' || code === 'Numpad0') return '0';
+  if (/^Digit[1-9]$/.test(code)) return code.slice(5);
+  if (/^Numpad[1-9]$/.test(code)) return code.slice(6);
+  const k = e.key || '';
+  if (AZERTY_DIGIT[k]) return AZERTY_DIGIT[k];
+  if (/^[0-9]$/.test(k)) return k;
   return '';
+}
+let logoTaps = [];
+function tapLogo(pt) {
+  if (state !== 'menu' || cheatOpen || !pt) return false;
+  if (pt.x < 0 || pt.x > W || pt.y < 4 || pt.y > 96) return false;
+  const now = performance.now();
+  logoTaps.push(now);
+  logoTaps = logoTaps.filter(t => now - t < 2500);
+  if (logoTaps.length >= 5) { logoTaps = []; cheatOpen = true; }
+  return true;
 }
 
 // ---------- input ----------
@@ -970,30 +996,51 @@ function toNative(e) { const b = cv.getBoundingClientRect(); return { x: (e.clie
 function press(pt) {
   ensureAudio();
   if (pt) mouse = pt;
+  if (tapLogo(pt)) return;
   for (let i = ui.length - 1; i >= 0; i--) { const u = ui[i]; if (mouse.x >= u.x && mouse.x < u.x + u.w && mouse.y >= u.y && mouse.y < u.y + u.h) { u.fn(); return; } }
   if (cheatOpen) return;
   if (state === 'play') flap();
 }
-cv.addEventListener('pointerdown', e => { e.preventDefault(); press(toNative(e)); });
-cv.addEventListener('pointermove', e => { mouse = toNative(e); });
-addEventListener('keydown', e => {
+const seenInput = new WeakSet();
+function onPointerDown(e) {
+  if (seenInput.has(e)) return;
+  seenInput.add(e);
+  if (e.isPrimary === false) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const b = cv.getBoundingClientRect();
+  if (e.clientX < b.left || e.clientX >= b.right || e.clientY < b.top || e.clientY >= b.bottom) return;
+  e.preventDefault();
+  press(toNative(e));
+}
+function onKeyDown(e) {
+  if (seenInput.has(e)) return;
+  seenInput.add(e);
   ensureAudio();
-  if (e.code === 'KeyM' && !e.shiftKey) { e.preventDefault(); if (!e.repeat) toggleMute(); return; }
-  if (e.code === 'KeyA' && e.shiftKey) { e.preventDefault(); if (!e.repeat) cheatOpen = !cheatOpen; return; }
+  if (isShiftA(e)) { e.preventDefault(); if (!e.repeat) cheatOpen = !cheatOpen; return; }
+  const letter = String(e.key || '').toLowerCase();
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (e.code === 'KeyM' || letter === 'm')) {
+    e.preventDefault(); if (!e.repeat) toggleMute(); return;
+  }
   if (cheatOpen) {
     e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'Escape') { cheatOpen = false; return; }
-    const k = cheatKey(e); const row = CHEAT_ROWS.find(r => r.key === k); if (row) row.go();
+    const k = digitFromEvent(e); const row = CHEAT_ROWS.find(r => r.key === k); if (row) row.go();
     return;
   }
-  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (e.repeat) return;
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ') { e.preventDefault(); if (e.repeat) return;
     if (state === 'play') flap(); else if (state === 'menu' || state === 'over') newRun(); }
-  if (state === 'boss' && run.boss && !run.boss.answered && /^Digit[1-9]$/.test(e.code)) {
-    const n = +e.code.slice(5) - 1; const o = run.boss.options && run.boss.options[n]; if (o) bossAnswer(o.i);
+  if (state === 'boss' && run.boss && !run.boss.answered) {
+    const k = digitFromEvent(e);
+    if (k && k !== '0') { const o = run.boss.options && run.boss.options[+k - 1]; if (o) bossAnswer(o.i); }
   }
   if (state === 'shop' && e.code === 'Escape') state = 'menu';
-});
+}
+window.addEventListener('keydown', onKeyDown, true);
+document.addEventListener('keydown', onKeyDown, true);
+window.addEventListener('pointerdown', onPointerDown, true);
+cv.addEventListener('pointerdown', onPointerDown);
+cv.addEventListener('pointermove', e => { mouse = toNative(e); });
 
 // ---------- main loop ----------
 let last = performance.now(), acc = 0;

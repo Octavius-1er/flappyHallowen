@@ -1,10 +1,48 @@
-// Questions d'anglais : à remplacer par les fiches de cours.
-// Format : { q: "question", choices: ["a","b","c"], answer: index }
-// Servent aux portes en vol et au boss de fin de monde.
+// Questions d'anglais (4e), d'après le dossier « Which Witch Is Which ».
+// Format : { q, choices, answer }. answer est l'index (0, 1 ou 2).
+// Les choix restent courts pour tenir sur les pancartes des portes.
 window.QUESTIONS = [
-  { q: "How do you say 'citrouille' in English?", choices: ["Pumpkin", "Pumpking", "Potato"], answer: 0 },
-  { q: "Complete: 'The witch ___ on her broom.'", choices: ["fly", "flies", "flying"], answer: 1 },
-  { q: "What is 'une chauve-souris'?", choices: ["A bird", "A bat", "A cat"], answer: 1 },
-  { q: "Past of 'go'?", choices: ["goed", "went", "gone"], answer: 1 },
-  { q: "'Trick or ___?'", choices: ["treat", "tree", "trip"], answer: 0 }
+  { q: "A witch flies on a ___.", choices: ["Broomstick", "Bicycle", "Train"], answer: 0 },
+  { q: "She stirs her potion in a ___.", choices: ["Cauldron", "Teacup", "Bucket"], answer: 0 },
+  { q: "Magic words are called a ___.", choices: ["Spell", "Song", "Joke"], answer: 0 },
+  { q: "A magic drink is a ___.", choices: ["Potion", "Soup", "Juice"], answer: 0 },
+  { q: "A witch's pet is often a ___.", choices: ["Black cat", "Goldfish", "Horse"], answer: 0 },
+  { q: "She points a magic ___.", choices: ["Wand", "Pen", "Spoon"], answer: 0 },
+  { q: "Her tall hat is ___.", choices: ["Pointed", "Round", "Flat"], answer: 0 },
+  { q: "The History Channel film is called ___.", choices: ["The Witches", "The Pirates", "The Robots"], answer: 0 },
+  { q: "English witch trials were mostly in the ___.", choices: ["16th-17th c.", "5th century", "Year 500"], answer: 0 },
+  { q: "Which king wrote about witches?", choices: ["James I", "Henry V", "Louis XIV"], answer: 0 },
+  { q: "Matthew Hopkins was the ___.", choices: ["Witchfinder", "King", "Doctor"], answer: 0 },
+  { q: "The Salem witch trials began in ___.", choices: ["1692", "1492", "1892"], answer: 0 },
+  { q: "Salem is in ___.", choices: ["Massachusetts", "London", "Paris"], answer: 0 },
+  { q: "How many people died in the Salem trials?", choices: ["About 20", "About 200", "About 2"], answer: 0 },
+  { q: "Which girl accused people in Salem?", choices: ["Abigail", "Dorothy", "Glinda"], answer: 0 },
+  { q: "Which woman was accused in Salem?", choices: ["Tituba", "Jadis", "Hermione"], answer: 0 },
+  { q: "Who painted The Magic Circle?", choices: ["Waterhouse", "Picasso", "Monet"], answer: 0 },
+  { q: "The Magic Circle was painted in ___.", choices: ["1886", "1486", "1986"], answer: 0 },
+  { q: "Dorothy's little dog is ___.", choices: ["Toto", "Tituba", "Tom"], answer: 0 },
+  { q: "The Wicked Witch of Oz rules the ___.", choices: ["West", "North", "Sea"], answer: 0 },
+  { q: "The good witch in Oz is ___.", choices: ["Glinda", "Jadis", "Tituba"], answer: 0 },
+  { q: "In the 1939 film, the slippers are ___.", choices: ["Ruby", "Silver", "Green"], answer: 0 },
+  { q: "In the Oz book, the slippers are ___.", choices: ["Silver", "Ruby", "Gold"], answer: 0 },
+  { q: "Dahl's witch leader is the ___ Witch.", choices: ["Grand High", "White", "Good"], answer: 0 },
+  { q: "In The Witches, witches hate ___.", choices: ["Children", "Cats", "Cake"], answer: 0 },
+  { q: "The Grand High Witch turns the boy into a ___.", choices: ["Mouse", "Frog", "Bat"], answer: 0 },
+  { q: "The teenage witch on TV is ___.", choices: ["Sabrina", "Dorothy", "Tituba"], answer: 0 },
+  { q: "Wednesday belongs to the ___ family.", choices: ["Addams", "Potter", "Salem"], answer: 0 },
+  { q: "Hermione learns magic at ___.", choices: ["Hogwarts", "Salem", "Oz"], answer: 0 },
+  { q: "In Hocus Pocus the witches are the ___ sisters.", choices: ["Sanderson", "Addams", "Williams"], answer: 0 },
+  { q: "\"Double, double, toil and ___.\"", choices: ["Trouble", "Bubble", "Rubble"], answer: 0 },
+  { q: "\"Fire burn and cauldron ___.\"", choices: ["Bubble", "Trouble", "Water"], answer: 0 },
+  { q: "A modern nature religion of witches is ___.", choices: ["Wicca", "Salem", "Oz"], answer: 0 },
+  { q: "Children dress as witches at ___.", choices: ["Halloween", "Easter", "Christmas"], answer: 0 },
+  { q: "The White Witch of Narnia is called ___.", choices: ["Jadis", "Glinda", "Sabrina"], answer: 0 },
+  { q: "Jadis: always winter, never ___.", choices: ["Christmas", "Halloween", "Rain"], answer: 0 },
+  { q: "Past: The witch ___ very angry.", choices: ["was", "were", "are"], answer: 0 },
+  { q: "Past: The two girls ___ afraid.", choices: ["were", "was", "is"], answer: 0 },
+  { q: "Past negative: They ___ witches.", choices: ["weren't", "wasn't", "aren't"], answer: 0 },
+  { q: "___ she fly last night?", choices: ["Did", "Does", "Was"], answer: 0 },
+  { q: "Past negative: She ___ fly.", choices: ["didn't", "doesn't", "wasn't"], answer: 0 },
+  { q: "Past of go: the cat ___ away.", choices: ["went", "goed", "gone"], answer: 0 },
+  { q: "Past of see: they ___ a bat.", choices: ["saw", "seen", "seed"], answer: 0 }
 ];

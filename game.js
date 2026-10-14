@@ -957,6 +957,7 @@ function fullHearts() {
   cheatNoteSet('Hearts full');
 }
 function toggleAutopilot() { auto = !auto; autoBossT = 0; cheatNoteSet(auto ? 'Autopilot on' : 'Autopilot off'); }
+function stopAutopilot() { if (!auto) return; auto = false; autoBossT = 0; cheatNoteSet('Autopilot off'); }
 function toggleGod() {
   godMode = !godMode;
   if (godMode && run && run.dead && state !== 'over') { run.dead = 0; run.lives = Math.max(1, run.lives); }
@@ -1003,7 +1004,21 @@ function drawCheat() {
     ctx.fillRect(box.panelX + 6, y + 1, box.panelW - 12, box.rowH - 2);
     ctx.strokeStyle = row.on && row.on() ? '#7dff5a' : '#6a4a90';
     ctx.strokeRect(box.panelX + 6.5, y + 1.5, box.panelW - 13, box.rowH - 3);
-    txt(row.key + '  ' + row.label(), box.panelX + 12, y + Math.max(2, (box.rowH - 10) / 2), 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
+    const textY = y + Math.max(2, (box.rowH - 10) / 2);
+    if (row.key === '1') {
+      txt('1  Auto', box.panelX + 12, textY, 8, '#fff', 'left', 'Pixelify');
+      const pill = auto ? 'ON' : 'OFF';
+      ctx.font = '8px Pixelify';
+      const pw = Math.ceil(ctx.measureText(pill).width) + 12;
+      const ph = Math.max(10, box.rowH - 4);
+      const px = box.panelX + box.panelW - 10 - pw;
+      const py = y + Math.floor((box.rowH - ph) / 2);
+      ctx.fillStyle = auto ? '#7dff5a' : '#3a2458';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = auto ? '#14300f' : '#c8b6dc';
+      ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+      txt(pill, px + pw / 2, py + Math.max(1, (ph - 8) / 2), 8, auto ? '#10240c' : '#fff', 'center', 'Pixelify', null);
+    } else txt(row.key + '  ' + row.label(), box.panelX + 12, textY, 8, row.on && row.on() ? '#b6ff9a' : '#fff', 'left', 'Pixelify');
   });
   const footY = box.top + CHEAT_ROWS.length * box.rowH;
   const foot = cheatNoteT > 0 ? cheatNote : 'Shift+A';
@@ -1023,6 +1038,24 @@ function drawCheatMark() {
   ctx.fillRect(W - w - 8, H - 13, w + 6, 9);
   txt(s, W - 4, H - 12, 7, '#d9c8ff', 'right', 'Pixelify', null);
   ctx.restore();
+}
+function autoBadgeBox() {
+  const rect = cv.getBoundingClientRect();
+  const scaleX = rect.width > 0 ? rect.width / W : 1;
+  const scaleY = rect.height > 0 ? rect.height / H : 1;
+  const scale = Math.min(scaleX, scaleY);
+  const h = Math.max(18, Math.ceil(44 / scale));
+  return { x: 4, y: H - h - 4, w: W - 8, h };
+}
+function drawAutoBadge() {
+  if (!auto || cheatOpen || (state !== 'play' && state !== 'boss')) return;
+  const b = autoBadgeBox();
+  const hov = region(b.x, b.y, b.w, b.h, stopAutopilot);
+  ctx.fillStyle = hov ? '#c6ff6a' : '#7dff5a';
+  ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.strokeStyle = '#14300f';
+  ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+  txt('AUTO ON - tap to stop', b.x + b.w / 2, b.y + Math.max(2, (b.h - 10) / 2), 8, '#10240c', 'center', 'Pixelify', null);
 }
 function drawMute() {
   if (state === 'loading' || cheatOpen) return;
@@ -1156,6 +1189,7 @@ function drawState() {
   else if (state === 'boss') drawBoss();
   else if (state === 'over') drawOver();
   if (!cheatOpen) drawCheatMark();
+  drawAutoBadge();
   if (cheatOpen) drawCheat();
   drawMute();
 }

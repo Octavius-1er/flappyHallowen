@@ -817,31 +817,25 @@ function drawShop() {
   else txt('PLAY from the menu to earn candy!', W / 2, 308, 8, '#888', 'center', 'Pixelify');
 }
 
-// ---------- audio (Web Audio, no files) ----------
-let actx = null, musicGain = null, sfxGain = null, muted = false, musicStep = 0, nextNoteAt = 0, noiseBuf = null;
-const TUNE = [
-  [220, 0.28], [0, 0.08], [233, 0.18], [220, 0.18],
-  [196, 0.28], [0, 0.1], [174, 0.36],
-  [196, 0.18], [220, 0.18], [262, 0.28], [247, 0.36],
-  [0, 0.12], [233, 0.18], [220, 0.18], [196, 0.28], [174, 0.48],
-  [165, 0.28], [196, 0.18], [220, 0.28], [0, 0.14],
-  [262, 0.18], [247, 0.18], [233, 0.28], [220, 0.4],
-  [196, 0.18], [174, 0.18], [165, 0.36], [147, 0.5],
-  [0, 0.22]
-];
+// ---------- audio ----------
+// Music is a looped file (see README). Sound effects stay on Web Audio.
+let actx = null, sfxGain = null, muted = false, noiseBuf = null;
+const musicEl = document.getElementById('music');
+if (musicEl) musicEl.volume = 0.35;
 function ensureAudio() {
   const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
-  if (!actx) {
+  if (AC && !actx) {
     try {
       actx = new AC();
       const master = actx.createGain(); master.gain.value = 0.85; master.connect(actx.destination);
-      musicGain = actx.createGain(); musicGain.gain.value = 1; musicGain.connect(master);
-      sfxGain = actx.createGain(); sfxGain.gain.value = 1; sfxGain.connect(master);
-      nextNoteAt = actx.currentTime + 0.05;
-    } catch (e) { actx = null; return; }
+      sfxGain = actx.createGain(); sfxGain.gain.value = muted ? 0 : 1; sfxGain.connect(master);
+    } catch (e) { actx = null; }
   }
-  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  if (actx && actx.state === 'suspended') actx.resume().catch(() => {});
+  if (musicEl) {
+    musicEl.muted = muted;
+    if (!muted && musicEl.paused) musicEl.play().catch(() => {});
+  }
 }
 function tone(freq, dur, type, gain, at, dest, slideTo) {
   try {
@@ -883,30 +877,14 @@ function sfxBoss() { tone(220, 0.12, 'square', 0.07, 0, sfxGain, 760); tone(660,
 function sfxWin() { const t0 = actx && actx.currentTime; [392, 523, 659, 784, 1046].forEach((f, i) => tone(f, 0.16, 'square', 0.05, t0 ? t0 + i * 0.09 : 0, sfxGain)); }
 function sfxBuy() { const t0 = actx && actx.currentTime; tone(660, 0.08, 'square', 0.05, t0, sfxGain); tone(880, 0.12, 'square', 0.05, t0 ? t0 + 0.08 : 0, sfxGain); }
 function sfxOver() { const t0 = actx && actx.currentTime; [440, 349, 262, 196].forEach((f, i) => tone(f, 0.22, 'triangle', 0.06, t0 ? t0 + i * 0.16 : 0, sfxGain)); }
-function pumpMusic() {
-  if (!actx || muted || !musicGain) return;
-  const horizon = actx.currentTime + 0.28;
-  if (nextNoteAt < actx.currentTime - 0.05) nextNoteAt = actx.currentTime + 0.02;
-  let guard = 0;
-  while (nextNoteAt < horizon && guard++ < 12) {
-    const [freq, dur] = TUNE[musicStep % TUNE.length];
-    if (freq) {
-      tone(freq, dur * 0.9, 'square', 0.04, nextNoteAt, musicGain);
-      tone(freq / 2, dur, 'triangle', 0.028, nextNoteAt, musicGain);
-    }
-    nextNoteAt += dur;
-    musicStep++;
-  }
-}
 function toggleMute() {
   ensureAudio();
   muted = !muted;
-  if (actx && musicGain && sfxGain) {
-    const g = muted ? 0 : 1, t0 = actx.currentTime;
-    musicGain.gain.setValueAtTime(g, t0);
-    sfxGain.gain.setValueAtTime(g, t0);
-    if (!muted) nextNoteAt = t0 + 0.02;
+  if (musicEl) {
+    musicEl.muted = muted;
+    if (!muted && musicEl.paused) musicEl.play().catch(() => {});
   }
+  if (actx && sfxGain) sfxGain.gain.setValueAtTime(muted ? 0 : 1, actx.currentTime);
 }
 
 // ---------- hidden cheat menu ----------
@@ -1199,7 +1177,6 @@ function frame(now) {
   if (cheatNoteT > 0) cheatNoteT = Math.max(0, cheatNoteT - el);
   ctx.setTransform(S, 0, 0, S, 0, 0); ctx.imageSmoothingEnabled = false;
   ui = [];
-  pumpMusic();
   if (!cheatOpen && state === 'play') {
     if (speedMul === 1) { acc += el * 60; while (acc >= 1) { step(1); acc -= 1; if (state !== 'play') break; } }
     else { for (let i = 0; i < speedMul && state === 'play'; i++) step(1); acc = 0; }
